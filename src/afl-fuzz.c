@@ -133,7 +133,7 @@ static u32 select_best_child(afl_state_t * afl)
   child = afl->tree_tmp->first_child;
   while(child)
   {
-    child->UCT = (child->q - Q_min)/(Q_max - Q_min) + 1.414* sqrt(log((double)(tree_tmp->N)) / ((double)(afl->child->N)));
+    child->UCT = (child->q - Q_min)/(Q_max - Q_min) + 1.414* sqrt(log((double)(tree_tmp->N)) / ((double)(afl->child_cur->N)));
     if(child->UCT > UCT_max)
     {
       flag = 1;
@@ -2230,7 +2230,7 @@ int main(int argc, char **argv_orig, char **envp) {
       }
 
       prev_queued = afl->queued_items;
-      prev_queued = afl->queued_paths;
+      // prev_queued = afl->queued_paths;
     }
 
     ++runs_in_current_cycle;
@@ -2239,10 +2239,11 @@ int main(int argc, char **argv_orig, char **envp) {
       if (likely(!afl->old_seed_selection)) {
         // if (unlikely(prev_queued_items < afl->queued_items ||
         //              afl->reinit_table)) {
-        if (unlikely(prev_queued_paths < afl->queued_paths)) {
+        // if (unlikely(prev_queued_paths < afl->queued_paths)) {
+        if (unlikely(prev_queued_paths < afl->queued_items)) {
           // we have new queue entries since the last run, recreate alias table
           prev_queued_items = afl->queued_items;
-          prev_queued_paths = afl->queued_paths;
+          // prev_queued_paths = afl->queued_paths;
           create_alias_table(afl);
         }
 
