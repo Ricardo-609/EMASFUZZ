@@ -247,6 +247,20 @@ struct queue_entry {
   double              distance; /* direct mode distance             */
 };
 
+typedef struct tree_node{
+  struct queue_entry * treefile;
+  u32 N;
+  u32 min;
+  u8 tree_trace[MAP_SIZE]; 
+  u8 node_trace[MAP_SIZE]; 
+  u32 trace_changed;
+  double q;
+  double UCT;
+  struct tree_node *parent;
+  struct tree_node *first_child;
+  struct tree_node *next_sibling;
+}TreeNode;
+
 struct extra_data {
   u8 *data;    /* Dictionary token data            */
   u32 len;     /* Dictionary token length          */
@@ -865,6 +879,13 @@ typedef struct afl_state {
   FILE *introspection_file;
   u32   bitsmap_size;
 #endif
+
+TreeNode * treeroot;
+TreeNode * tree_cur;
+TreeNode * child_cur;
+TreeNode * tree_tmp;
+u32 number;
+u32 path_found;
 
 } afl_state_t;
 

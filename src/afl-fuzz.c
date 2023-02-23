@@ -44,6 +44,212 @@
 extern u64 time_spent_working;
 #endif
 
+/*init tree*/
+static void init_tree(afl_state_t * afl)
+{
+  
+  afl->path_found = 0;
+  afl->treeroot = ck_alloc(sizeof(TreeNode));
+  afl->treeroot->first_child = afl->treeroot->parent = afl->treeroot->next_sibling = NULL;
+  afl->tree_cur = NULL;
+  afl->treeroot->N = 1;
+  afl->treeroot->min = 1;
+  afl->treeroot->q = 0.0;
+  memset(afl->treeroot->node_trace,0,MAP_SIZE);
+  memset(afl->treeroot->tree_trace,0,MAP_SIZE);
+  afl->treeroot->treefile = NULL;
+  afl->treeroot->trace_changed = 0;
+  afl->treeroot->UCT = 0.0;
+}
+
+/*calculate the UCT of the treenode */
+static double UCT_Q(TreeNode *p,TreeNode *c,u32 min)
+{
+  double Q = 0.0;
+  for(int i = 0;i<MAP_SIZE;i++)
+  {
+    if(p->tree_trace[i] == min && c->tree_trace[i] > 0)
+      Q = Q+1.0;
+  }
+  double res = Q/(double)(c->N);
+  return res;
+}
+
+
+/*select the best child*/
+
+static u32 select_best_child(afl_state_t * afl)
+{
+  u32 flag = 0;
+  u32 min = afl->number;
+  if(afl->tree_tmp->first_child == NULL)
+  {
+    afl->tree_tmp->trace_changed = 0;
+    return flag;
+  }
+  //Normalization. First, we get the max and min q/(double)(c->N)
+  double Q_max = 0.0;
+  double Q_min = 0.0;
+  
+  //Calculate the variant node's Q
+  afl->tree_tmp->q = 0.0;
+  for(int i = 0;i<MAP_SIZE;i++)
+  {
+    if(afl->tree_tmp->tree_trace[i] > 0 && afl->tree_tmp->tree_trace[i] < min)
+    {
+      min = afl->tree_tmp->tree_trace[i];
+      afl->tree_tmp->q = 0.0;
+    }else if(afl->tree_tmp->tree_trace[i] == min && afl->tree_tmp->node_trace[i] >= 1)
+    {
+      afl->tree_tmp->q = afl->tree_tmp->q + 1.0;
+    }  
+  }
+  afl->tree_tmp->q =  afl->tree_tmp->q / (double)afl->tree_tmp-> N;
+  Q_max = Q_min = afl->tree_tmp->q;
+  afl->tree_tmp->trace_changed = 0;
+  //Calculate all the child nodes'Q
+  TreeNode * child = afl->tree_tmp->first_child;
+  while(child)
+  {
+    child->q = UCT_Q(afl->tree_tmp,child,min);
+    if(child->q > Q_max)
+    {
+      Q_max = child->q;
+    }
+    if(child->q < Q_min)
+    {
+      Q_min = child->q;
+    }
+    child = child->next_sibling;
+  }
+  
+  //Calculate the UCT
+  if(afl->tree_tmp->parent == NULL)
+      afl->tree_tmp->UCT = 0.0;
+  else
+      afl->tree_tmp->UCT = (afl->tree_tmp->q - Q_min)/(Q_max - Q_min) + 1.414* sqrt(log((double)(afl->tree_tmp->N)) / ((double)(afl->tree_tmp->N)));
+  double UCT_max = afl->tree_tmp->UCT;
+  TreeNode * max_node = afl->tree_tmp;
+  child = afl->tree_tmp->first_child;
+  while(child)
+  {
+    child->UCT = (child->q - Q_min)/(Q_max - Q_min) + 1.414* sqrt(log((double)(tree_tmp->N)) / ((double)(afl->child->N)));
+    if(child->UCT > UCT_max)
+    {
+      flag = 1;
+      UCT_max = child->UCT;
+      max_node = child;
+    }
+    child = child->next_sibling;
+  }
+  afl->tree_tmp = max_node;
+  afl->tree_tmp->N += 1;
+  afl->tree_tmp->min = min;
+  if(afl->tree_tmp->treefile == NULL)
+  {
+    SAYF("Treefile is empty!\n");
+    fflush(stdout);
+    afl->tree_tmp = afl->treeroot->first_child;
+  }
+  return flag;
+}
+
+static u32 select_best_childone(afl_state_t * afl)
+{
+  
+  double UCT_max = afl->tree_tmp->UCT;
+  TreeNode * max_node = afl->tree_tmp;
+  u32 flag = 0;
+  if(afl->tree_tmp->first_child == NULL)
+  return flag;
+  TreeNode * child = afl->tree_tmp->first_child;
+  while(child)
+  {
+    if(child->UCT >= UCT_max)
+    {
+      flag = 1;
+      UCT_max = child->UCT;
+      max_node = child;
+    }
+    child = child->next_sibling;
+  }
+  afl->tree_tmp = max_node;
+  afl->tree_tmp->N += 1;
+  if(afl->tree_tmp->treefile == NULL)
+  {
+    SAYF("aaaa\n");
+    fflush(stdout);
+    afl->tree_tmp = afl->treeroot->first_child;
+  }
+  return flag;
+}
+
+
+static void select_treenode(afl_state_t * afl)
+{
+  
+  afl->tree_tmp = afl->treeroot;
+  u32 flag = 1;
+  while(flag)
+  {
+    if(afl->tree_tmp->trace_changed)
+    flag = select_best_child(afl);
+    else
+    {
+      flag = select_best_childone(afl);
+    } 
+  } 
+ 
+}
+
+
+/* alphuzz back_propagation */
+static void back_propagation(afl_state_t * afl)
+{
+  
+  u8 trace[MAP_SIZE];
+  memset(trace,0,MAP_SIZE);
+  if(afl->tree_cur == NULL)
+  {
+    TreeNode * t = afl->treeroot->first_child;
+    while(t)
+    {
+      for(int i=0;i<MAP_SIZE;i++)
+      {
+        if(t->node_trace[i])
+        afl->treeroot->tree_trace[i] += t->node_trace[i];
+      }
+      t = t->next_sibling;
+    }
+    afl->treeroot->trace_changed = 1; 
+  }else{
+    TreeNode * t = afl->tree_cur->first_child;
+    while(t)
+    {
+      if(!(t->treefile->was_fuzzed))
+      {
+        for(int i=0;i<MAP_SIZE;i++)
+        {
+          if(t->node_trace[i]>0)
+          trace[i] += t->node_trace[i];
+        }
+      }
+      t = t->next_sibling;
+    }
+    TreeNode * parent = afl->tree_cur;
+    while(parent)
+    {
+      for(int i=0;i<MAP_SIZE;i++)
+      parent->tree_trace[i] += trace[i];
+      parent->trace_changed = 1;
+      parent = parent->parent;
+    }
+  }
+
+}
+
+
+
 static void at_exit() {
   s32   i, pid1 = 0, pid2 = 0, pid3 = 0, pid4 = 0;
   char *list[5] = {SHM_ENV_VAR, SHM_FUZZ_ENV_VAR, CMPLOG_SHM_ENV_VAR,
@@ -1437,6 +1643,8 @@ int main(int argc, char **argv_orig, char **envp) {
 
   setup_cmdline_file(afl, argv + optind);
 
+  init_tree(afl);
+
   read_testcases(afl, NULL);
   // read_foreign_testcases(afl, 1); for the moment dont do this
   OKF("Loaded a total of %u seeds.", afl->queued_items);
@@ -1846,8 +2054,23 @@ int main(int argc, char **argv_orig, char **envp) {
   OKF("Writing mutation introspection to '%s'", ifn);
   #endif
 
+  back_propagation(afl);
+  afl->queue_cycle = 0;
+
   while (likely(!afl->stop_soon)) {
-    cull_queue(afl);
+    //cull_queue(afl);
+
+    select_treenode(afl);
+
+    afl->tree_cur = afl->tree_tmp;
+    afl->queue_cur = afl->tree_cur->treefile;
+    char * str = strstr(afl->queue_cur->fname,"id");
+    afl->current_entry = 0;
+
+    for(int i=3;i<9;i++)
+    {
+      afl->current_entry = afl->current_entry*10+(str[i]-48);
+    }
 
     if (unlikely((!afl->old_seed_selection &&
                   runs_in_current_cycle > afl->queued_items) ||
@@ -1885,10 +2108,10 @@ int main(int argc, char **argv_orig, char **envp) {
         }
       }
 
-      if (unlikely(afl->not_on_tty)) {
-        ACTF("Entering queue cycle %llu.", afl->queue_cycle);
-        fflush(stdout);
-      }
+      // if (unlikely(afl->not_on_tty)) {
+      //   ACTF("Entering queue cycle %llu.", afl->queue_cycle);
+      //   fflush(stdout);
+      // }
 
       /* If we had a full queue cycle with no new finds, try
          recombination strategies next. */
@@ -2012,8 +2235,9 @@ int main(int argc, char **argv_orig, char **envp) {
 
     do {
       if (likely(!afl->old_seed_selection)) {
-        if (unlikely(prev_queued_items < afl->queued_items ||
-                     afl->reinit_table)) {
+        // if (unlikely(prev_queued_items < afl->queued_items ||
+        //              afl->reinit_table)) {
+        if (unlikely(prev_queued_paths < afl->queued_paths)) {
           // we have new queue entries since the last run, recreate alias table
           prev_queued_items = afl->queued_items;
           create_alias_table(afl);
@@ -2025,6 +2249,9 @@ int main(int argc, char **argv_orig, char **envp) {
 
       skipped_fuzz = fuzz_one(afl);
 
+      afl->queue_cur->was_fuzzed = 1;
+      back_propagation(afl);
+      
       if (unlikely(!afl->stop_soon && exit_1)) { afl->stop_soon = 2; }
 
       if (unlikely(afl->old_seed_selection)) {

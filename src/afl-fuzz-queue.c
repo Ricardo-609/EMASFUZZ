@@ -59,7 +59,7 @@ double compute_weight(afl_state_t *afl, struct queue_entry *q,
   weight *= (log(q->bitmap_size) / avg_bitmap_size);
   weight *= (1 + (q->tc_ref / avg_top_size));
   if (unlikely(q->favored)) { weight *= 5; }
-  if (unlikely(!q->was_fuzzed)) { weight *= 2; }
+  // if (unlikely(!q->was_fuzzed)) { weight *= 2; }
 
   return weight;
 
@@ -199,7 +199,7 @@ void create_alias_table(afl_state_t *afl) {
   while (nS)
     afl->alias_probability[S[--nS]] = 1;
 
-  afl->reinit_table = 0;
+  // afl->reinit_table = 0;
 
   /*
   #ifdef INTROSPECTION
@@ -518,6 +518,7 @@ static u8 check_if_text(afl_state_t *afl, struct queue_entry *q) {
 /* Append new test case to the queue. */
 
 void add_to_queue(afl_state_t *afl, u8 *fname, u32 len, u8 passed_det) {
+  afl->number++;
 
   struct queue_entry *q = ck_alloc(sizeof(struct queue_entry));
 
@@ -564,6 +565,52 @@ void add_to_queue(afl_state_t *afl, u8 *fname, u32 len, u8 passed_det) {
   ++afl->pending_not_fuzzed;
 
   afl->cycles_wo_finds = 0;
+
+  /*MCTS add to tree*/
+  TreeNode * tree = ck_alloc(sizeof(TreeNode));
+  tree->treefile = q;
+  tree->N = 1;
+  tree->min = 1;
+  tree->trace_changed = 0;
+  tree->q = 0.0;
+  tree->UCT = 0.0;
+  tree->parent = tree->first_child = tree->next_sibling = NULL;
+  /*MCTS At the very beginning, add initial seeds to the treeroot*/
+  if(!afl->tree_cur)
+  {
+    if(!(afl->treeroot->first_child))
+    {
+      afl->treeroot->first_child = tree;
+      tree->parent = afl->treeroot;
+      //SAYF("add_node %s to treeroot\n",tree->treefile->fname);
+      //fflush(stdout);
+    }else{
+      TreeNode * t = afl->treeroot->first_child;
+      while(t->next_sibling)
+      t = t->next_sibling;
+      t->next_sibling = tree;
+      tree->parent = afl->treeroot;
+     // SAYF("add_node %s to treeroot\n",tree->treefile->fname);
+      fflush(stdout);
+    }
+    
+  }else{
+    /* now we are in the afl's while loop, we should add the new testcases as the child node of tree_cur*/
+    if(!(afl->tree_cur->first_child))
+    {
+      afl->tree_cur->first_child = tree;
+      tree->parent = afl->tree_cur;
+    }else{
+      TreeNode * t = afl->tree_cur->first_child;
+      while(t->next_sibling)
+      t = t->next_sibling;
+      t->next_sibling = tree;
+      tree->parent = afl->tree_cur;
+    }
+    //SAYF("add_node %s to %s\n",tree->treefile->fname,tree->parent->treefile->fname);
+    //fflush(stdout);
+  }
+  afl->child_cur = tree;
 
   struct queue_entry **queue_buf = afl_realloc(
       AFL_BUF_PARAM(queue), afl->queued_items * sizeof(struct queue_entry *));
@@ -1227,9 +1274,14 @@ inline u8 *queue_testcase_get(afl_state_t *afl, struct queue_entry *q) {
 
         do_once = 1;
         // release unneeded memory
-        afl->q_testcase_cache = ck_realloc(
+        // afl->q_testcase_cache = ck_realloc(
+        //     afl->q_testcase_cache,
+        //     (afl->q_testcase_max_cache_entries + 1) * sizeof(size_t));
+        u8 *ptr = ck_realloc(
             afl->q_testcase_cache,
             (afl->q_testcase_max_cache_entries + 1) * sizeof(size_t));
+
+        if (ptr) { afl->q_testcase_cache = (struct queue_entry **)ptr; }
 
       }
 

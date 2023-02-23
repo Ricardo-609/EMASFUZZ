@@ -494,6 +494,10 @@ u8 calibrate_case(afl_state_t *afl, struct queue_entry *q, u8 *use_mem,
   q->handicap = handicap;
   q->cal_failed = 0;
 
+  //MCTS record the trace of this input
+  memcpy(afl->child_cur->node_trace,afl->fsrv.trace_bits,MAP_SIZE);
+  memcpy(afl->child_cur->tree_trace,afl->fsrv.trace_bits,MAP_SIZE);
+  
   afl->total_bitmap_size += q->bitmap_size;
   ++afl->total_bitmap_entries;
 

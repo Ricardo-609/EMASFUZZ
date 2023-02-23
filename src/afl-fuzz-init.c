@@ -597,84 +597,97 @@ void read_testcases(afl_state_t *afl, u8 *directory) {
     shuffle_ptrs(afl, (void **)nl, nl_cnt);
   }
 
-  if (nl_cnt) {
-    i = nl_cnt;
-    do {
-      --i;
+  for (i = 0; i < (u32)nl_cnt; ++i) {
 
-      struct stat st;
-      u8          dfn[PATH_MAX];
-      snprintf(dfn, PATH_MAX, "%s/.state/deterministic_done/%s", afl->in_dir,
-               nl[i]->d_name);
-      u8 *fn2 = alloc_printf("%s/%s", dir, nl[i]->d_name);
+    struct stat st;
 
-      u8 passed_det = 0;
+    u8 dfn[PATH_MAX];
+    snprintf(dfn, PATH_MAX, "%s/.state/deterministic_done/%s", afl->in_dir,
+             nl[i]->d_name);
+    u8 *fn2 = alloc_printf("%s/%s", dir, nl[i]->d_name);
 
-      if (lstat(fn2, &st) || access(fn2, R_OK)) {
-        PFATAL("Unable to access '%s'", fn2);
-      }
+    u8 passed_det = 0;
 
-      /* obviously we want to skip "descending" into . and .. directories,
-         however it is a good idea to skip also directories that start with
-         a dot */
-      if (subdirs && S_ISDIR(st.st_mode) && nl[i]->d_name[0] != '.') {
-        free(nl[i]); /* not tracked */
-        read_testcases(afl, fn2);
-        ck_free(fn2);
-        continue;
-      }
+    if (lstat(fn2, &st) || access(fn2, R_OK)) {
 
-      free(nl[i]);
+      PFATAL("Unable to access '%s'", fn2);
 
-      if (!S_ISREG(st.st_mode) || !st.st_size || strstr(fn2, "/README.txt")) {
-        ck_free(fn2);
-        continue;
-      }
+    }
 
-      if (st.st_size > MAX_FILE) {
-        WARNF("Test case '%s' is too big (%s, limit is %s), partial reading",
-              fn2,
-              stringify_mem_size(val_buf[0], sizeof(val_buf[0]), st.st_size),
-              stringify_mem_size(val_buf[1], sizeof(val_buf[1]), MAX_FILE));
-      }
+    /* obviously we want to skip "descending" into . and .. directories,
+       however it is a good idea to skip also directories that start with
+       a dot */
+    if (subdirs && S_ISDIR(st.st_mode) && nl[i]->d_name[0] != '.') {
 
-      /* Check for metadata that indicates that deterministic fuzzing
-         is complete for this entry. We don't want to repeat deterministic
-         fuzzing when resuming aborted scans, because it would be pointless
-         and probably very time-consuming. */
+      free(nl[i]);                                           /* not tracked */
+      read_testcases(afl, fn2);
+      ck_free(fn2);
+      continue;
 
-      if (!access(dfn, F_OK)) { passed_det = 1; }
+    }
 
-      add_to_queue(afl, fn2, st.st_size >= MAX_FILE ? MAX_FILE : st.st_size,
-                   passed_det);
+    free(nl[i]);
 
-      if (unlikely(afl->shm.cmplog_mode)) {
-        if (afl->cmplog_lvl == 1) {
-          if (!afl->cmplog_max_filesize ||
-              afl->cmplog_max_filesize < st.st_size) {
-            afl->cmplog_max_filesize = st.st_size;
-          }
+    if (!S_ISREG(st.st_mode) || !st.st_size || strstr(fn2, "/README.txt")) {
 
-        } else if (afl->cmplog_lvl == 2) {
-          if (!afl->cmplog_max_filesize ||
-              afl->cmplog_max_filesize > st.st_size) {
-            afl->cmplog_max_filesize = st.st_size;
-          }
+      ck_free(fn2);
+      continue;
+
+    }
+
+    if (st.st_size > MAX_FILE) {
+
+      WARNF("Test case '%s' is too big (%s, limit is %s), partial reading", fn2,
+            stringify_mem_size(val_buf[0], sizeof(val_buf[0]), st.st_size),
+            stringify_mem_size(val_buf[1], sizeof(val_buf[1]), MAX_FILE));
+
+    }
+
+    /* Check for metadata that indicates that deterministic fuzzing
+       is complete for this entry. We don't want to repeat deterministic
+       fuzzing when resuming aborted scans, because it would be pointless
+       and probably very time-consuming. */
+
+    if (!access(dfn, F_OK)) { passed_det = 1; }
+
+    add_to_queue(afl, fn2, st.st_size >= MAX_FILE ? MAX_FILE : st.st_size,
+                 passed_det);
+
+    if (unlikely(afl->shm.cmplog_mode)) {
+
+      if (afl->cmplog_lvl == 1) {
+
+        if (!afl->cmplog_max_filesize ||
+            afl->cmplog_max_filesize < st.st_size) {
+
+          afl->cmplog_max_filesize = st.st_size;
+
         }
+
+      } else if (afl->cmplog_lvl == 2) {
+
+        if (!afl->cmplog_max_filesize ||
+            afl->cmplog_max_filesize > st.st_size) {
+
+          afl->cmplog_max_filesize = st.st_size;
+
+        }
+
       }
 
-      /*
-          if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE)) {
+    }
 
-            u64 cksum = hash64(afl->fsrv.trace_bits, afl->fsrv.map_size,
-         HASH_CONST); afl->queue_top->n_fuzz_entry = cksum % N_FUZZ_SIZE;
-            afl->n_fuzz[afl->queue_top->n_fuzz_entry] = 1;
+    /*
+        if (unlikely(afl->schedule >= FAST && afl->schedule <= RARE)) {
 
-          }
+          u64 cksum = hash64(afl->fsrv.trace_bits, afl->fsrv.map_size,
+       HASH_CONST); afl->queue_top->n_fuzz_entry = cksum % N_FUZZ_SIZE;
+          afl->n_fuzz[afl->queue_top->n_fuzz_entry] = 1;
 
-      */
+        }
 
-    } while (i > 0);
+    */
+
   }
 
   free(nl); /* not tracked */
@@ -709,12 +722,16 @@ void read_testcases(afl_state_t *afl, u8 *directory) {
    expected. This is done only for the initial inputs, and only once. */
 
 void perform_dry_run(afl_state_t *afl) {
-  struct queue_entry *q;
+  // struct queue_entry *q;
   u32                 cal_failures = 0, idx;
   u8                 *use_mem;
 
-  for (idx = 0; idx < afl->queued_items; idx++) {
-    q = afl->queue_buf[idx];
+  afl->child_cur = afl->treeroot->first_child;
+  struct queue_entry* q = afl->child_cur->treefile;
+
+  //for (idx = 0; idx < afl->queued_items; idx++) {
+  while (q) {
+    //q = afl->queue_buf[idx];
     if (unlikely(!q || q->disabled)) { continue; }
 
     u8  res;
@@ -938,6 +955,15 @@ void perform_dry_run(afl_state_t *afl) {
     if (q->var_behavior) {
       WARNF("Instrumentation output varies across runs.");
     }
+
+    afl->child_cur = afl->child_cur->next_sibling;
+    if(afl->child_cur)
+    q = afl->child_cur->treefile;
+    else
+    {
+      q = NULL;
+    }
+
   }
 
   if (cal_failures) {

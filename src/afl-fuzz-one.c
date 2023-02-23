@@ -1745,8 +1745,10 @@ havoc_stage:
   if (!splice_cycle) {
     afl->stage_name = "havoc";
     afl->stage_short = "havoc";
+    //afl->stage_max = (doing_det ? HAVOC_CYCLES_INIT : HAVOC_CYCLES) *
+      //               perf_score / afl->havoc_div / 100;
     afl->stage_max = (doing_det ? HAVOC_CYCLES_INIT : HAVOC_CYCLES) *
-                     perf_score / afl->havoc_div / 100;
+                     perf_score / afl->havoc_div /afl->tree_cur->min / afl->tree_cur->N / 100;
 
   } else {
     perf_score = orig_perf;
@@ -1754,7 +1756,10 @@ havoc_stage:
     snprintf(afl->stage_name_buf, STAGE_BUF_SIZE, "splice %u", splice_cycle);
     afl->stage_name = afl->stage_name_buf;
     afl->stage_short = "splice";
-    afl->stage_max = SPLICE_HAVOC * perf_score / afl->havoc_div / 100;
+    //afl->stage_max = SPLICE_HAVOC * perf_score / afl->havoc_div / 100;
+    
+    afl->stage_max = SPLICE_HAVOC * perf_score / afl->havoc_div / afl->tree_cur->min / afl->tree_cur->N / 100;
+
   }
 
   if (afl->stage_max < HAVOC_MIN) { afl->stage_max = HAVOC_MIN; }
@@ -1840,7 +1845,8 @@ havoc_stage:
             if (likely(new_len > 0 && custom_havoc_buf)) {
               temp_len = new_len;
               if (out_buf != custom_havoc_buf) {
-                out_buf = afl_realloc(AFL_BUF_PARAM(out), temp_len);
+                // out_buf = afl_realloc(AFL_BUF_PARAM(out), temp_len);
+                afl_realloc(AFL_BUF_PARAM(out), temp_len);
                 if (unlikely(!afl->out_buf)) { PFATAL("alloc"); }
                 memcpy(out_buf, custom_havoc_buf, temp_len);
               }
@@ -2596,7 +2602,7 @@ abandon_entry:
     if (!afl->queue_cur->was_fuzzed) {
       --afl->pending_not_fuzzed;
       afl->queue_cur->was_fuzzed = 1;
-      afl->reinit_table = 1;
+      //afl->reinit_table = 1;
       if (afl->queue_cur->favored) { --afl->pending_favored; }
     }
   }
