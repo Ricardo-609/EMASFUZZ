@@ -2041,6 +2041,7 @@ int main(int argc, char **argv_orig, char **envp) {
 
   u32 runs_in_current_cycle = (u32)-1;
   u32 prev_queued_items = 0;
+  u32 prev_queued_paths = 0;
   u8  skipped_fuzz;
 
   #ifdef INTROSPECTION
@@ -2229,6 +2230,7 @@ int main(int argc, char **argv_orig, char **envp) {
       }
 
       prev_queued = afl->queued_items;
+      prev_queued = afl->queued_paths;
     }
 
     ++runs_in_current_cycle;
@@ -2240,6 +2242,7 @@ int main(int argc, char **argv_orig, char **envp) {
         if (unlikely(prev_queued_paths < afl->queued_paths)) {
           // we have new queue entries since the last run, recreate alias table
           prev_queued_items = afl->queued_items;
+          prev_queued_paths = afl->queued_paths;
           create_alias_table(afl);
         }
 
