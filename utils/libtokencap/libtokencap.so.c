@@ -30,8 +30,10 @@
 #include <fcntl.h>
 #include <stdbool.h>
 
-#include "../types.h"
-#include "../config.h"
+// #include "../types.h"
+// #include "../config.h"
+#include "types.h"
+#include "config.h"
 
 #include "debug.h"
 
